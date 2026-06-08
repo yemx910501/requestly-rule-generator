@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>韩国税务局网站 Requestly规则生成器</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-light: #3b82f6;
+      --primary-dark: #1d4ed8;
+      --success: #10b981;
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+      --warning: #f59e0b;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-alt: #f1f5f9;
+      --text: #1e293b;
+      --text-light: #64748b;
+      --border: #e2e8f0;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+      --shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1);
+      --radius: 8px;
+      --radius-lg: 12px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      padding: 32px 0;
+      box-shadow: var(--shadow-lg);
+    }
+
+    header .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-light);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow);
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+
+    .btn-success:hover:not(:disabled) {
+      background: #059669;
+      transform: translateY(-1px);
+      box-shadow: var(--shadow);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: var(--danger-hover);
+    }
+
+    .btn-secondary {
+      background: var(--surface-alt);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--border);
+    }
+
+    .btn-sm {
+      padding: 8px 14px;
+      font-size: 13px;
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+    }
+
+    .card-title .icon {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .form-group label .required {
+      color: var(--danger);
+      margin-left: 4px;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="url"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 14px;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 16px;
+    }
+
+    .rule-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: box-shadow 0.2s;
+    }
+
+    .rule-item:hover {
+      box-shadow: var(--shadow);
+    }
+
+    .rule-header {
+      background: var(--surface-alt);
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .rule-header h4 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .rule-content {
+      padding: 18px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 500;
+      background: #dbeafe;
+      color: var(--primary);
+    }
+
+    .badge.green {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .field-mapping {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    .field-mapping th {
+      background: var(--surface-alt);
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 13px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .field-mapping td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    .field-mapping tr:last-child td {
+      border-bottom: none;
+    }
+
+    .field-mapping input {
+      font-size: 13px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-light);
+    }
+
+    .empty-state svg {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      opacity: 0.4;
+    }
+
+    .empty-state p {
+      margin-bottom: 16px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--text);
+      color: white;
+      padding: 14px 20px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      z-index: 2000;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast.success {
+      background: var(--success);
+    }
+
+    .toast.error {
+      background: var(--danger);
+    }
+
+    .code-preview {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 16px;
+      border-radius: var(--radius);
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-x: auto;
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    @media (max-width: 768px) {
+      header .container {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center;
+      }
+
+      header h1 {
+        font-size: 22px;
+      }
+
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div>
+        <h1>📋 韩国税务局网站 Requestly规则生成器</h1>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-secondary" onclick="importRules()">
+          📥 导入规则
+        </button>
+        <button class="btn btn-success" onclick="exportRules()" id="exportBtn" disabled>
+          📤 导出规则
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 基本信息 -->
+    <div class="card">
+      <h2 class="card-title">
+        <span class="icon">⚙️</span>
+        基本信息
+      </h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>规则名称 <span class="required">*</span></label>
+          <input type="text" id="ruleName" placeholder="例如：用户1_查询现金收据购买历史记录">
+        </div>
+        <div class="form-group">
+          <label>规则描述</label>
+          <input type="text" id="ruleDesc" placeholder="可选，简要说明规则用途">
+        </div>
+      </div>
+    </div>
+
+    <!-- 响应修改规则 -->
+    <div class="card">
+      <h2 class="card-title">
+        <span class="icon">✏️</span>
+        响应修改规则
+      </h2>
+      <div id="responseGroupsList">
+        <div class="empty-state" id="emptyResponseGroups">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          <p>请先导入规则文件</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 预览与导出 -->
+    <div class="card">
+      <h2 class="card-title">
+        <span class="icon">👁️</span>
+        预览生成的代码
+        <button class="btn btn-secondary btn-sm" onclick="generatePreview()" style="margin-left: auto;">
+          刷新预览
+        </button>
+      </h2>
+      <div class="code-preview" id="codePreview">请先导入规则文件</div>
+    </div>
+  </main>
+
+  <!-- Toast 提示 -->
+  <div class="toast" id="toast"></div>
+
+  <!-- 隐藏的文件输入 -->
+  <input type="file" id="fileInput" class="hidden" accept=".json" onchange="handleImport(event)">
+
+  <script>
+    // ==================== 数据存储 ====================
+    let responseGroups = [];
+    let matchUrl = 'https://tecr.hometax.go.kr/wqAction.do'; // 固定 URL 匹配条件
+
+    // ==================== Toast 提示 ====================
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast ${type} show`;
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    // ==================== 渲染规则组列表 ====================
+    function renderResponseGroups() {
+      const container = document.getElementById('responseGroupsList');
+      const emptyState = document.getElementById('emptyResponseGroups');
+
+      if (responseGroups.length === 0) {
+        container.innerHTML = '';
+        container.appendChild(emptyState);
+        emptyState.style.display = 'block';
+        return;
+      }
+
+      container.innerHTML = responseGroups.map((group, groupIndex) => `
+        <div class="rule-item" style="margin-bottom: 16px;">
+          <div class="rule-header">
+            <div>
+              <h4>${group.name}</h4>
+              <div style="display: flex; gap: 8px; margin-top: 4px;">
+                <span class="badge">${group.actionId}</span>
+                ${group.dataPath ? `<span class="badge green">${group.dataPath}</span>` : ''}
+                <span class="badge">${group.fields.length} 个字段</span>
+              </div>
+            </div>
+          </div>
+          <div class="rule-content">
+            ${group.fields.length > 0 ? `
+              <table class="field-mapping">
+                <thead>
+                  <tr>
+                    <th>字段说明</th>
+                    <th>字段值</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${group.fields.map((field, fieldIndex) => `
+                    <tr>
+                      <td>${field.comment || '-'}</td>
+                      <td>
+                        <input type="text" value="${field.value}" 
+                               onchange="updateFieldValue(${groupIndex}, ${fieldIndex}, this.value)"
+                               style="width: 100%; min-width: 200px;">
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            ` : '<p style="color: var(--text-light); font-size: 13px;">无字段</p>'}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ==================== 更新字段值 ====================
+    function updateFieldValue(groupIndex, fieldIndex, newValue) {
+      responseGroups[groupIndex].fields[fieldIndex].value = newValue;
+      showToast('字段值已更新');
+    }
+
+    // ==================== 生成 JavaScript 代码 ====================
+    function generateJavaScript() {
+      let code = `function modifyResponse(args) {\n`;
+      code += `  const {\n`;
+      code += `    method,\n`;
+      code += `    url,\n`;
+      code += `    response,\n`;
+      code += `    responseType,\n`;
+      code += `    requestHeaders,\n`;
+      code += `    requestData,\n`;
+      code += `    responseJSON,\n`;
+      code += `  } = args;\n`;
+      code += `  // Change response below depending upon request attributes received in args\n`;
+      code += `  var res = JSON.parse(response);\n`;
+      code += `  const uri = new URL(url);\n`;
+      code += `  const actionId = uri.searchParams.get("actionId");\n\n`;
+
+      responseGroups.forEach((group, index) => {
+        code += `  if (actionId == "${group.actionId}") {\n`;
+        code += `    // === ${group.name} ===\n`;
+
+        // 构建完整的目标路径（包含 res. 前缀）
+        let target;
+        if (group.dataPath) {
+          // 检查是否已包含数组索引（如 bmanBscInfrInqrDVOList[0]）
+          if (group.dataPath.includes('[')) {
+            // 已有索引，直接使用
+            target = `res.${group.dataPath}`;
+          } else {
+            // 无索引，添加 [0]
+            target = `res.${group.dataPath}[0]`;
+          }
+        } else {
+          // 根对象
+          target = 'res';
+        }
+
+        group.fields.forEach(field => {
+          if (field.comment) {
+            code += `    // ${field.comment}\n`;
+          }
+
+          const valueStr = field.type === 'number' ? field.value : `"${field.value}"`;
+          code += `    ${target}.${field.name} = ${valueStr};\n`;
+        });
+
+        code += `  }`;
+        if (index < responseGroups.length - 1) {
+          code += ` else`;
+        }
+        code += `\n\n`;
+      });
+
+      code += `  return JSON.stringify(res);\n`;
+      code += `}`;
+
+      return code;
+    }
+
+    // ==================== 预览代码 ====================
+    function generatePreview() {
+      if (responseGroups.length === 0) {
+        document.getElementById('codePreview').textContent = '请先导入规则文件';
+        return;
+      }
+
+      const code = generateJavaScript();
+      document.getElementById('codePreview').textContent = code;
+    }
+
+    // ==================== 导出规则 ====================
+    function generateRuleJSON() {
+      const ruleName = document.getElementById('ruleName').value.trim();
+      if (!ruleName || responseGroups.length === 0) {
+        return null;
+      }
+
+      const javascript = generateJavaScript();
+
+      return [{
+        "createdBy": "browserstack-10930584",
+        "creationDate": Date.now(),
+        "currentOwner": "browserstack-10930584",
+        "description": document.getElementById('ruleDesc').value.trim(),
+        "groupId": "",
+        "id": `Response_${Math.random().toString(36).substr(2, 5)}`,
+        "isSample": false,
+        "lastModifiedBy": "browserstack-10930584",
+        "modificationDate": Date.now(),
+        "name": ruleName,
+        "objectType": "rule",
+        "pairs": [{
+          "id": Math.random().toString(36).substr(2, 5),
+          "response": {
+            "resourceType": "restApi",
+            "statusCode": "",
+            "type": "code",
+            "value": javascript
+          },
+          "source": {
+            "key": "Url",
+            "operator": "Contains",
+            "value": matchUrl
+          }
+        }],
+        "ruleType": "Response",
+        "schemaVersion": "3.0.0",
+        "status": "Active"
+      }];
+    }
+
+    function exportRules() {
+      const ruleName = document.getElementById('ruleName').value.trim();
+
+      if (!ruleName) {
+        showToast('请填写规则名称', 'error');
+        return;
+      }
+
+      if (responseGroups.length === 0) {
+        showToast('请先导入规则', 'error');
+        return;
+      }
+
+      const rules = generateRuleJSON();
+      if (!rules) {
+        showToast('生成规则失败，请检查填写内容', 'error');
+        return;
+      }
+
+      // 创建下载链接
+      const blob = new Blob([JSON.stringify(rules, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${ruleName}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast('规则导出成功');
+    }
+
+    // ==================== 导入规则 ====================
+    function importRules() {
+      document.getElementById('fileInput').click();
+    }
+
+    function handleImport(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const rules = JSON.parse(e.target.result);
+          if (!rules || !rules.length || !rules[0].pairs) {
+            throw new Error('无效的规则文件格式');
+          }
+
+          const rule = rules[0];
+
+          // 填充基本信息
+          document.getElementById('ruleName').value = rule.name || '';
+          document.getElementById('ruleDesc').value = rule.description || '';
+
+          // 解析 JavaScript 代码
+          const javascript = rule.pairs[0]?.response?.value;
+          if (javascript) {
+            console.log('原始 JavaScript 代码长度:', javascript.length);
+            console.log('原始 JavaScript 代码前200字符:', javascript.substring(0, 200));
+            parseJavaScriptToGroups(javascript);
+            console.log('解析后的 responseGroups:', responseGroups);
+          }
+
+          renderResponseGroups();
+          generatePreview();
+          updateExportButton();
+          showToast('规则导入成功');
+        } catch (err) {
+          console.error(err);
+          showToast('导入失败：' + err.message, 'error');
+        }
+      };
+      reader.readAsText(file);
+
+      // 清空文件输入
+      event.target.value = '';
+    }
+
+    // ==================== 解析 JavaScript 代码为规则组 ====================
+    function parseJavaScriptToGroups(code) {
+      responseGroups = [];
+
+      console.log('========== 开始解析 JavaScript 代码 ==========');
+      console.log('代码总长度:', code.length);
+
+      // 找到所有 if/else if 行的位置
+      const ifPositions = [];
+      const lines = code.split('\n');
+      
+      for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        const match = trimmed.match(/(?:else\s+)?if\s*\(\s*actionId\s*==\s*"([^"]+)"\s*\)/);
+        if (match) {
+          ifPositions.push({ lineIndex: i, actionId: match[1] });
+          console.log(`找到 if 分支: ${match[1]} (行 ${i}): "${trimmed.substring(0, 60)}..."`);
+        }
+      }
+
+      if (ifPositions.length === 0) {
+        console.warn('未找到任何 actionId 分支');
+        return;
+      }
+
+      console.log(`\n共找到 ${ifPositions.length} 个分支，开始逐个解析...`);
+
+      // 为每个分支提取内容
+      ifPositions.forEach((pos, idx) => {
+        const nextIdx = idx + 1 < ifPositions.length ? ifPositions[idx + 1].lineIndex : lines.length;
+        const blockLines = lines.slice(pos.lineIndex + 1, nextIdx);
+
+        const group = {
+          name: '',
+          actionId: pos.actionId,
+          dataPath: '',
+          fields: []
+        };
+
+        console.log(`\n--- 解析分支 ${pos.actionId} (${blockLines.length} 行) ---`);
+
+        // 查找组名注释
+        for (const line of blockLines) {
+          const nameMatch = line.match(/\/\/\s*===\s*(.+?)\s*===/);
+          if (nameMatch) {
+            group.name = nameMatch[1].trim();
+            console.log(`  找到组名: "${group.name}"`);
+            break;
+          }
+        }
+        if (!group.name) {
+          group.name = `规则 ${pos.actionId}`;
+        }
+
+        // 合并连续行，处理多行赋值（如 field = \n "value"）
+        const mergedLines = [];
+        for (let k = 0; k < blockLines.length; k++) {
+          const line = blockLines[k].trim();
+          if (mergedLines.length > 0 && mergedLines[mergedLines.length - 1].endsWith('=') && line) {
+            mergedLines[mergedLines.length - 1] += ' ' + line;
+          } else {
+            mergedLines.push(line);
+          }
+        }
+        console.log(`  合并后 ${mergedLines.length} 行`);
+
+        // 跟踪局部变量映射: variableName -> dataPath（含数组索引）
+        const varMap = {};
+
+        // 先扫描 const/let 变量声明，提取 res.xxx[0] 路径
+        for (let k = 0; k < mergedLines.length; k++) {
+          const line = mergedLines[k];
+          const varDeclMatch = line.match(/const\s+(\w+)\s*=\s*res\.([\w]+(?:\??\[\d+\])?)/);
+          if (varDeclMatch) {
+            varMap[varDeclMatch[1]] = varDeclMatch[2];
+            console.log(`  发现变量映射: ${varDeclMatch[1]} -> res.${varDeclMatch[2]}`);
+          }
+        }
+
+        // 解析字段赋值
+        let fieldCount = 0;
+        for (let k = 0; k < mergedLines.length; k++) {
+          const line = mergedLines[k];
+          const fieldMatch = line.match(/\/\/\s*(.+?)$/);
+          if (fieldMatch) {
+            const comment = fieldMatch[1].trim();
+
+            // 跳过组名注释（如 // === 商户信息 ===）
+            if (line.match(/\/\/\s*===\s*.+?\s*===/)) {
+              continue;
+            }
+
+            if (k + 1 < mergedLines.length) {
+              const assignLine = mergedLines[k + 1];
+
+              // 格式 1: res.xxx.field = value
+              let assignMatch = assignLine.match(/res\.([\w]+(?:\[\d+\])?(?:\.[\w]+(?:\[\d+\])?)*?)\s*=\s*(.+?);/);
+              
+              // 格式 2: 局部变量.field = value (如 cshTrsBrkdInqrDVO.trsDtTime)
+              if (!assignMatch) {
+                const localVarMatch = assignLine.match(/(\w+)\.(\w+)\s*=\s*(.+?);/);
+                if (localVarMatch && varMap[localVarMatch[1]]) {
+                  assignMatch = [null, varMap[localVarMatch[1]] + '.' + localVarMatch[2], localVarMatch[3]];
+                }
+              }
+              
+              // 格式 3: 对象字面量属性 (fieldName: value,)
+              if (!assignMatch) {
+                assignMatch = assignLine.match(/([\w]+)\s*:\s*(.+?),?$/);
+              }
+
+              if (assignMatch) {
+                const fullPath = assignMatch[1];
+                let valueStr = assignMatch[2].trim();
+
+                if (valueStr.endsWith(',')) {
+                  valueStr = valueStr.slice(0, -1);
+                }
+
+                const isNumber = !valueStr.startsWith('"') && !valueStr.startsWith("'");
+                if (!isNumber) {
+                  valueStr = valueStr.replace(/^["']|["']$/g, '');
+                }
+
+                const lastDotIndex = fullPath.lastIndexOf('.');
+                let fieldName, dataPath;
+                if (lastDotIndex !== -1) {
+                  fieldName = fullPath.substring(lastDotIndex + 1);
+                  dataPath = fullPath.substring(0, lastDotIndex);
+                } else {
+                  fieldName = fullPath;
+                  dataPath = '';
+                }
+
+                fieldCount++;
+                group.fields.push({
+                  comment,
+                  name: fieldName,
+                  value: valueStr,
+                  type: isNumber ? 'number' : 'string'
+                });
+
+                if (!group.dataPath && dataPath) {
+                  group.dataPath = dataPath;
+                }
+              } else {
+                console.log(`  注释 "${comment}" 后未找到匹配赋值: "${mergedLines[k+1]?.substring(0, 50)}"`);
+              }
+            }
+          }
+        }
+
+        console.log(`  分支 ${pos.actionId} 解析完成: ${fieldCount} 个字段`);
+        responseGroups.push(group);
+      });
+
+      console.log(`\n========== 解析完成，共 ${responseGroups.length} 个规则组 ==========`);
+    }
+
+    // ==================== 更新导出按钮状态 ====================
+    function updateExportButton() {
+      const canExport = document.getElementById('ruleName').value.trim() &&
+                        responseGroups.length > 0;
+      document.getElementById('exportBtn').disabled = !canExport;
+    }
+
+    // 监听输入变化
+    document.getElementById('ruleName').addEventListener('input', updateExportButton);
+
+    // ==================== 初始化 ====================
+    document.addEventListener('DOMContentLoaded', function() {
+      renderResponseGroups();
+    });
+  </script>
+</body>
+</html>
