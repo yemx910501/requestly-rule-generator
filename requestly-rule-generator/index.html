@@ -558,11 +558,14 @@
             if (dataPath.includes('[')) {
               // 已有索引，直接使用
               target = `res.${dataPath}`;
-            } else {
-              // 无索引，使用可选链 + 默认对象模式
-              varName = dataPath.replace('List', '') || dataPath.substring(0, 20);
+            } else if (dataPath.includes('List') || dataPath.includes('list') || dataPath.endsWith('s')) {
+              // 数组路径（名称含 List/list 或复数形式），使用可选链 + 默认对象模式
+              varName = dataPath.replace(/List$/, '') || dataPath.substring(0, 20);
               varDecl = `    const ${varName} = res.${dataPath}?.[0] ?? {};\n`;
               target = varName;
+            } else {
+              // 普通对象路径，直接使用
+              target = `res.${dataPath}`;
             }
           } else {
             // 根对象
@@ -595,15 +598,15 @@
           }
         });
 
+        // 为 ATECRCBA001R02 分支追加固定字段
+        if (group.actionId === 'ATECRCBA001R02') {
+          code += `    res.pageInfoVO.totalCount = 1;\n`;
+          code += `    res.totalCount = 1;\n`;
+        }
+
         code += `  }`;
         if (index < responseGroups.length - 1) {
           code += ` else`;
-        }
-
-        // 为 ATECRCBA001R02 分支追加固定字段
-        if (group.actionId === 'ATECRCBA001R02') {
-          code += `\n    res.pageInfoVO.totalCount = 1;`;
-          code += `\n    res.totalCount = 1;`;
         }
 
         code += `\n\n`;
