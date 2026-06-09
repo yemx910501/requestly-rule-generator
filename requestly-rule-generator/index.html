@@ -424,9 +424,14 @@
       <h2 class="card-title">
         <span class="icon">👁️</span>
         预览生成的代码
-        <button class="btn btn-secondary btn-sm" onclick="generatePreview()" style="margin-left: auto;">
-          刷新预览
-        </button>
+        <div style="margin-left: auto; display: flex; gap: 8px;">
+          <button class="btn btn-secondary btn-sm" onclick="generatePreview()">
+            刷新预览
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="copyCode()" id="copyBtn" disabled>
+            📋 复制
+          </button>
+        </div>
       </h2>
       <div class="code-preview" id="codePreview">请先导入规则文件</div>
     </div>
@@ -532,29 +537,62 @@
         code += `  if (actionId == "${group.actionId}") {\n`;
         code += `    // === ${group.name} ===\n`;
 
-        // 构建完整的目标路径（包含 res. 前缀）
-        let target;
-        if (group.dataPath) {
-          // 检查是否已包含数组索引（如 bmanBscInfrInqrDVOList[0]）
-          if (group.dataPath.includes('[')) {
-            // 已有索引，直接使用
-            target = `res.${group.dataPath}`;
-          } else {
-            // 无索引，添加 [0]
-            target = `res.${group.dataPath}[0]`;
-          }
-        } else {
-          // 根对象
-          target = 'res';
-        }
-
+        // 按 dataPath 分组字段
+        const fieldsByPath = {};
         group.fields.forEach(field => {
-          if (field.comment) {
-            code += `    // ${field.comment}\n`;
+          const path = field.dataPath || ''; // 空字符串表示直接操作 res
+          if (!fieldsByPath[path]) {
+            fieldsByPath[path] = [];
+          }
+          fieldsByPath[path].push(field);
+        });
+
+        // 为每个 dataPath 生成对应的代码块
+        Object.entries(fieldsByPath).forEach(([dataPath, fields]) => {
+          let target;
+          let varDecl = '';
+          let varName = '';
+
+          if (dataPath) {
+            // 检查是否已包含数组索引（如 bmanBscInfrInqrDVOList[0]）
+            if (dataPath.includes('[')) {
+              // 已有索引，直接使用
+              target = `res.${dataPath}`;
+            } else {
+              // 无索引，使用可选链 + 默认对象模式
+              varName = dataPath.replace('List', '') || dataPath.substring(0, 20);
+              varDecl = `    const ${varName} = res.${dataPath}?.[0] ?? {};\n`;
+              target = varName;
+            }
+          } else {
+            // 根对象
+            target = 'res';
           }
 
-          const valueStr = field.type === 'number' ? field.value : `"${field.value}"`;
-          code += `    ${target}.${field.name} = ${valueStr};\n`;
+          // 输出变量声明（如果需要）
+          if (varDecl) {
+            code += varDecl;
+            code += `\n`;
+          }
+
+          fields.forEach(field => {
+            if (field.comment) {
+              code += `    // ${field.comment}\n`;
+            }
+
+            const valueStr = field.type === 'number' ? field.value : `"${field.value}"`;
+            code += `    ${target}.${field.name} = ${valueStr};\n`;
+          });
+
+          // 如果使用了局部变量，需要将结果重新赋值回 res
+          if (varDecl && dataPath) {
+            code += `\n    res.${dataPath} = [${varName}];\n`;
+          }
+
+          // 在多个 dataPath 之间添加空行分隔
+          if (Object.keys(fieldsByPath).length > 1) {
+            code += `\n`;
+          }
         });
 
         code += `  }`;
@@ -574,11 +612,34 @@
     function generatePreview() {
       if (responseGroups.length === 0) {
         document.getElementById('codePreview').textContent = '请先导入规则文件';
+        document.getElementById('copyBtn').disabled = true;
         return;
       }
 
       const code = generateJavaScript();
       document.getElementById('codePreview').textContent = code;
+      document.getElementById('copyBtn').disabled = false;
+    }
+
+    // ==================== 复制代码 ====================
+    function copyCode() {
+      const code = document.getElementById('codePreview').textContent;
+      if (!code || code === '请先导入规则文件') return;
+
+      navigator.clipboard.writeText(code).then(() => {
+        showToast('代码已复制到剪贴板');
+      }).catch(() => {
+        // 降级方案：使用 textarea
+        const textarea = document.createElement('textarea');
+        textarea.value = code;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast('代码已复制到剪贴板');
+      });
     }
 
     // ==================== 导出规则 ====================
@@ -773,17 +834,30 @@
         console.log(`  合并后 ${mergedLines.length} 行`);
         mergedLines.forEach((l, i) => console.log(`    [${i}]: "${l}"`));
 
-        // 跟踪局部变量映射: variableName -> dataPath（含数组索引）
+        // 跟踪局部变量映射: variableName -> dataPath（不含 res. 前缀）
         const varMap = {};
+        // 记录第一个变量声明的 dataPath，用于对象字面量字段继承
+        let firstVarDeclDataPath = '';
 
         // 先扫描 const/let 变量声明，提取 res.xxx[0] 路径
         for (let k = 0; k < mergedLines.length; k++) {
           const line = mergedLines[k];
-          const varDeclMatch = line.match(/const\s+(\w+)\s*=\s*res\.([\w]+(?:\??\[\d+\])?)/);
+          // 匹配: const xxx = res.xxxList?.[0] 或 const xxx = res.xxxList[0]
+          const varDeclMatch = line.match(/const\s+(\w+)\s*=\s*res\.([\w]+)(?:\??\[\d+\])?/);
           if (varDeclMatch) {
             varMap[varDeclMatch[1]] = varDeclMatch[2];
-            console.log(`  发现变量映射: ${varDeclMatch[1]} -> res.${varDeclMatch[2]}`);
+            // 记录第一个变量声明的 dataPath（用于对象字面量字段继承）
+            if (!firstVarDeclDataPath) {
+              firstVarDeclDataPath = varDeclMatch[2];
+            }
+            console.log(`  发现变量映射: ${varDeclMatch[1]} -> ${varDeclMatch[2]}`);
           }
+        }
+
+        // 如果有变量声明，将 group.dataPath 设置为第一个变量的路径
+        if (firstVarDeclDataPath && !group.dataPath) {
+          group.dataPath = firstVarDeclDataPath;
+          console.log(`  设置 group.dataPath 为: "${firstVarDeclDataPath}"`);
         }
 
         // 解析字段赋值
@@ -819,17 +893,27 @@
               // 格式 1: res.xxx.field = value (支持任意深度路径和数组索引)
               let assignMatch = targetAssignLine.match(/res\.([\w]+(?:\[\d+\])?(?:\.[\w]+(?:\[\d+\])?)*)\s*=\s*(.+?);/);
               
+              console.log(`    [行${k}] 格式1匹配结果: ${assignMatch ? '是' : '否'}`);
+
               // 格式 2: 局部变量.field = value (如 cshTrsBrkdInqrDVO.trsDtTime)
               if (!assignMatch) {
                 const localVarMatch = targetAssignLine.match(/(\w+)\.(\w+)\s*=\s*(.+?);/);
+                console.log(`    [行${k}] 格式2匹配结果: ${localVarMatch ? '是' : '否'}`);
                 if (localVarMatch && varMap[localVarMatch[1]]) {
                   assignMatch = [null, varMap[localVarMatch[1]] + '.' + localVarMatch[2], localVarMatch[3]];
                 }
               }
               
-              // 格式 3: 对象字面量属性 (fieldName: value,)
+              // 格式 3: 对象字面量属性 (fieldName: value,) - 这些字段应继承当前组的 dataPath
+              let isInheritDataPath = false;
               if (!assignMatch) {
-                assignMatch = targetAssignLine.match(/([\w]+)\s*:\s*(.+?),?$/);
+                const literalMatch = targetAssignLine.match(/([\w]+)\s*:\s*(.+?),?$/);
+                console.log(`    [行${k}] 格式3匹配结果: ${literalMatch ? '是' : '否'}, 匹配内容: ${literalMatch ? literalMatch[0] : '无'}`);
+                if (literalMatch) {
+                  assignMatch = literalMatch;
+                  isInheritDataPath = true; // 标记为需要继承 dataPath
+                  console.log(`    [行${k}] 检测到对象字面量格式: "${targetAssignLine}"`);
+                }
               }
 
               if (assignMatch) {
@@ -852,16 +936,24 @@
                   dataPath = fullPath.substring(0, lastDotIndex);
                 } else {
                   fieldName = fullPath;
-                  dataPath = '';
+                  // 如果是对象字面量格式（格式3），继承当前组的 dataPath
+                  if (isInheritDataPath && group.dataPath) {
+                    dataPath = group.dataPath;
+                    console.log(`    [行${k}] 对象字面量继承 dataPath: "${dataPath}"`);
+                  } else {
+                    dataPath = '';
+                    console.log(`    [行${k}] 对象字面量无法继承 dataPath，group.dataPath = "${group.dataPath}"`);
+                  }
                 }
 
                 fieldCount++;
-                console.log(`    字段 ${fieldCount}: ${comment} -> ${fullPath} = ${valueStr}`);
+                console.log(`    字段 ${fieldCount}: ${comment} -> ${fullPath} = ${valueStr} (dataPath: ${dataPath})`);
                 group.fields.push({
                   comment,
                   name: fieldName,
                   value: valueStr,
-                  type: isNumber ? 'number' : 'string'
+                  type: isNumber ? 'number' : 'string',
+                  dataPath: dataPath
                 });
 
                 if (!group.dataPath && dataPath) {
