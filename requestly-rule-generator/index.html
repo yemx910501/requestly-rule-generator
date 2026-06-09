@@ -742,6 +742,7 @@
         };
 
         console.log(`\n--- 解析分支 ${pos.actionId} (${blockLines.length} 行) ---`);
+        blockLines.forEach((l, i) => console.log(`  原始[${i}]: "${l.trim()}"`));
 
         // 查找组名注释
         for (const line of blockLines) {
@@ -756,17 +757,21 @@
           group.name = `规则 ${pos.actionId}`;
         }
 
-        // 合并连续行，处理多行赋值（如 field = \n "value"）
+        // 合并连续行，只处理多行赋值（上一行以 = 结尾且无分号）
+        // 注意：注释行不合并，保持独立
         const mergedLines = [];
         for (let k = 0; k < blockLines.length; k++) {
           const line = blockLines[k].trim();
-          if (mergedLines.length > 0 && mergedLines[mergedLines.length - 1].endsWith('=') && line) {
+          const prevLine = mergedLines.length > 0 ? mergedLines[mergedLines.length - 1] : '';
+          // 只有上一行以 = 结尾且不是注释行才合并（避免 === 结尾的注释被错误合并）
+          if (line && !prevLine.startsWith('//') && prevLine.endsWith('=') && !prevLine.endsWith(';')) {
             mergedLines[mergedLines.length - 1] += ' ' + line;
           } else {
             mergedLines.push(line);
           }
         }
         console.log(`  合并后 ${mergedLines.length} 行`);
+        mergedLines.forEach((l, i) => console.log(`    [${i}]: "${l}"`));
 
         // 跟踪局部变量映射: variableName -> dataPath（含数组索引）
         const varMap = {};
@@ -791,18 +796,32 @@
 
             // 跳过组名注释（如 // === 商户信息 ===）
             if (line.match(/\/\/\s*===\s*.+?\s*===/)) {
+              console.log(`    [行${k}] 跳过组名注释: "${line}"`);
               continue;
             }
+
+            console.log(`    [行${k}] 注释: "${comment}", 下一行: "${mergedLines[k+1] || '无'}"`);
 
             if (k + 1 < mergedLines.length) {
               const assignLine = mergedLines[k + 1];
 
-              // 格式 1: res.xxx.field = value
-              let assignMatch = assignLine.match(/res\.([\w]+(?:\[\d+\])?(?:\.[\w]+(?:\[\d+\])?)*?)\s*=\s*(.+?);/);
+              // 跳过空行，找到下一个非空行
+              let searchK = k + 1;
+              let targetAssignLine = '';
+              while (searchK < mergedLines.length) {
+                targetAssignLine = mergedLines[searchK].trim();
+                if (targetAssignLine) break;
+                searchK++;
+              }
+
+              console.log(`    [行${k}] 搜索赋值行: "${targetAssignLine}"`);
+
+              // 格式 1: res.xxx.field = value (支持任意深度路径和数组索引)
+              let assignMatch = targetAssignLine.match(/res\.([\w]+(?:\[\d+\])?(?:\.[\w]+(?:\[\d+\])?)*)\s*=\s*(.+?);/);
               
               // 格式 2: 局部变量.field = value (如 cshTrsBrkdInqrDVO.trsDtTime)
               if (!assignMatch) {
-                const localVarMatch = assignLine.match(/(\w+)\.(\w+)\s*=\s*(.+?);/);
+                const localVarMatch = targetAssignLine.match(/(\w+)\.(\w+)\s*=\s*(.+?);/);
                 if (localVarMatch && varMap[localVarMatch[1]]) {
                   assignMatch = [null, varMap[localVarMatch[1]] + '.' + localVarMatch[2], localVarMatch[3]];
                 }
@@ -810,7 +829,7 @@
               
               // 格式 3: 对象字面量属性 (fieldName: value,)
               if (!assignMatch) {
-                assignMatch = assignLine.match(/([\w]+)\s*:\s*(.+?),?$/);
+                assignMatch = targetAssignLine.match(/([\w]+)\s*:\s*(.+?),?$/);
               }
 
               if (assignMatch) {
@@ -837,6 +856,7 @@
                 }
 
                 fieldCount++;
+                console.log(`    字段 ${fieldCount}: ${comment} -> ${fullPath} = ${valueStr}`);
                 group.fields.push({
                   comment,
                   name: fieldName,
