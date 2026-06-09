@@ -599,6 +599,13 @@
         if (index < responseGroups.length - 1) {
           code += ` else`;
         }
+
+        // 为 ATECRCBA001R02 分支追加固定字段
+        if (group.actionId === 'ATECRCBA001R02') {
+          code += `\n    res.pageInfoVO.totalCount = 1;`;
+          code += `\n    res.totalCount = 1;`;
+        }
+
         code += `\n\n`;
       });
 
@@ -862,8 +869,66 @@
 
         // 解析字段赋值
         let fieldCount = 0;
+        // 记录已处理过的行索引（避免重复处理）
+        const processedLines = new Set();
+
         for (let k = 0; k < mergedLines.length; k++) {
+          if (processedLines.has(k)) continue;
+
           const line = mergedLines[k];
+
+          // 先尝试匹配独立的赋值语句（如 res.pageInfoVO.totalCount = 1;）
+          // 格式 A: res.xxx.field = value; 或 res.field = value;
+          const standaloneMatch = line.match(/res\.([\w]+(?:\[\d+\])?(?:\.[\w]+(?:\[\d+\])?)*)\s*=\s*(.+?);/);
+          if (standaloneMatch && !line.startsWith('//')) {
+            const fullPath = standaloneMatch[1];
+            let valueStr = standaloneMatch[2].trim();
+            if (valueStr.endsWith(',')) {
+              valueStr = valueStr.slice(0, -1);
+            }
+            const isNumber = !valueStr.startsWith('"') && !valueStr.startsWith("'");
+            if (!isNumber) {
+              valueStr = valueStr.replace(/^["']|["']$/g, '');
+            }
+
+            const lastDotIndex = fullPath.lastIndexOf('.');
+            let fieldName, dataPath;
+            if (lastDotIndex !== -1) {
+              fieldName = fullPath.substring(lastDotIndex + 1);
+              dataPath = fullPath.substring(0, lastDotIndex);
+            } else {
+              fieldName = fullPath;
+              dataPath = '';
+            }
+
+            // 跳过 pageInfoVO.totalCount 和 totalCount（导出时硬编码追加）
+            if (fieldName === 'totalCount') {
+              console.log(`    [行${k}] 跳过 totalCount 字段（导出时追加）`);
+              processedLines.add(k);
+              continue;
+            }
+
+            // 跳过将列表重新赋值回变量的行（如 res.cshTrsBrkdInqrDVOList = [cshTrsBrkdInqrDVO];）
+            if (Object.values(varMap).includes(fullPath)) {
+              console.log(`    [行${k}] 跳过列表回赋值: "${fullPath}"`);
+              processedLines.add(k);
+              continue;
+            }
+
+            fieldCount++;
+            console.log(`    字段 ${fieldCount}: [无注释] -> ${fullPath} = ${valueStr} (dataPath: ${dataPath})`);
+            group.fields.push({
+              comment: '',
+              name: fieldName,
+              value: valueStr,
+              type: isNumber ? 'number' : 'string',
+              dataPath: dataPath
+            });
+            processedLines.add(k);
+            continue;
+          }
+
+          // 如果不是独立赋值，尝试匹配注释行
           const fieldMatch = line.match(/\/\/\s*(.+?)$/);
           if (fieldMatch) {
             const comment = fieldMatch[1].trim();
@@ -955,6 +1020,9 @@
                   type: isNumber ? 'number' : 'string',
                   dataPath: dataPath
                 });
+
+                // 标记赋值行已处理
+                processedLines.add(searchK);
 
                 if (!group.dataPath && dataPath) {
                   group.dataPath = dataPath;
