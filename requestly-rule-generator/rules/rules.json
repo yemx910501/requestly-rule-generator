@@ -1,6 +1,38 @@
 [
   {
     "createdBy": "browserstack-10930584",
+    "creationDate": 1777592190051,
+    "currentOwner": "browserstack-10930584",
+    "description": "",
+    "groupId": "",
+    "id": "Response_xqmma",
+    "isSample": false,
+    "lastModifiedBy": "browserstack-10930584",
+    "modificationDate": 1777601342361,
+    "name": "用户1_用户信息",
+    "objectType": "rule",
+    "pairs": [
+      {
+        "id": "9avob",
+        "response": {
+          "resourceType": "restApi",
+          "statusCode": "",
+          "type": "code",
+          "value": "function modifyResponse(args) {\n  const {\n    method,\n    url,\n    response,\n    responseType,\n    requestHeaders,\n    requestData,\n    responseJSON,\n  } = args;\n  // Change response below depending upon request attributes received in args\n  // console.log(\"hook\", url, response, JSON.parse(response));\n  var res = JSON.parse(response);\n  //res.cshTrsBrkdInqrDVOList[0].splCft = 10000;\n  if (res.resultMsg && res.resultMsg.sessionMap) {\n    res.resultMsg.sessionMap.userNm = \"다오방 유한회사\";\n    res.resultMsg.sessionMap.txprDscmNo = \"1218644444\";\n  }\n  return JSON.stringify(res);\n}\n"
+        },
+        "source": {
+          "key": "Url",
+          "operator": "Contains",
+          "value": "https://hometax.go.kr/wqAction.do?actionId=ATXPPCBA001R17&screenId=index_pp&popupYn=false&realScreenId="
+        }
+      }
+    ],
+    "ruleType": "Response",
+    "schemaVersion": "3.0.0",
+    "status": "Inactive"
+  },
+  {
+    "createdBy": "browserstack-10930584",
     "creationDate": 1777591983798,
     "currentOwner": "browserstack-10930584",
     "description": "",
