@@ -537,8 +537,8 @@
       </h2>
       <div class="form-row">
         <div class="form-group" style="grid-column: 1 / -1;">
-          <label>规则描述</label>
-          <input type="text" id="ruleDesc" placeholder="可选，简要说明规则用途">
+          <label>规则名称</label>
+          <input type="text" id="ruleName" placeholder="自定义规则名称">
         </div>
       </div>
     </div>
@@ -602,7 +602,7 @@
     let currentRuleIndex = -1; // 当前选中的规则索引
     let matchUrl = 'https://tecr.hometax.go.kr/wqAction.do'; // 默认 URL 匹配条件
     let currentMatchUrl = ''; // 当前规则的 URL 匹配条件
-    let ruleCache = {}; // 缓存每个规则的编辑状态 { index: { responseGroups, ruleDesc } }
+    let ruleCache = {}; // 缓存每个规则的编辑状态 { index: { responseGroups, ruleName } }
 
     // ==================== Toast 提示 ====================
     function showToast(message, type = 'success') {
@@ -654,7 +654,7 @@
       if (currentRuleIndex >= 0) {
         ruleCache[currentRuleIndex] = {
           responseGroups: JSON.parse(JSON.stringify(responseGroups)),
-          ruleDesc: document.getElementById('ruleDesc').value
+          ruleName: document.getElementById('ruleName').value
         };
       }
 
@@ -670,10 +670,11 @@
       // 尝试从缓存恢复
       if (ruleCache[index]) {
         responseGroups = JSON.parse(JSON.stringify(ruleCache[index].responseGroups));
-        document.getElementById('ruleDesc').value = ruleCache[index].ruleDesc || '';
+        document.getElementById('ruleName').value = ruleCache[index].ruleName || '';
       } else {
-        // 首次加载，从原始数据解析
-        document.getElementById('ruleDesc').value = rule.description || '';
+        // 首次加载，从原始数据解析；默认名称 = {规则名}_{时间戳}
+        const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+        document.getElementById('ruleName').value = `${rule.name || '未命名规则'}_${ts}`;
         currentMatchUrl = rule.pairs?.[0]?.source?.value || matchUrl;
 
         const javascript = rule.pairs?.[0]?.response?.value;
@@ -891,13 +892,13 @@
       const rule = allRules[index];
 
       // 优先使用缓存中的编辑数据，否则使用当前数据
-      let groups, desc;
+      let groups, name;
       if (ruleCache[index]) {
         groups = ruleCache[index].responseGroups;
-        desc = ruleCache[index].ruleDesc || '';
+        name = ruleCache[index].ruleName || rule.name || '未命名规则';
       } else if (index === currentRuleIndex) {
         groups = responseGroups;
-        desc = document.getElementById('ruleDesc').value;
+        name = document.getElementById('ruleName').value || rule.name || '未命名规则';
       } else {
         // 未访问过的规则，从原始数据解析
         const javascript = rule.pairs?.[0]?.response?.value;
@@ -917,7 +918,8 @@
         responseGroups = origGroups;
         currentRuleIndex = origIndex;
         groups = tempGroups;
-        desc = rule.description || '';
+        const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+        name = `${rule.name || '未命名规则'}_${ts}`;
       }
 
       if (!groups || groups.length === 0) return null;
@@ -941,13 +943,13 @@
         "createdBy": rule.createdBy || "browserstack-10930584",
         "creationDate": rule.creationDate || Date.now(),
         "currentOwner": rule.currentOwner || "browserstack-10930584",
-        "description": desc,
+        "description": name,
         "groupId": rule.groupId || "",
         "id": rule.id || `Response_${Math.random().toString(36).substr(2, 5)}`,
         "isSample": false,
         "lastModifiedBy": rule.lastModifiedBy || "browserstack-10930584",
         "modificationDate": Date.now(),
-        "name": rule.name || '未命名规则',
+        "name": name,
         "objectType": "rule",
         "pairs": [{
           "id": rule.pairs?.[0]?.id || Math.random().toString(36).substr(2, 5),
@@ -990,7 +992,9 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'rules.json';
+      // 文件名格式：requestly规则_{时间戳}
+      const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+      a.download = `requestly规则_${ts}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1014,9 +1018,16 @@
 
     function saveExportHistory(rules) {
       const history = getHistory();
+      // 提取所有规则的名称，便于历史记录展示
+      const ruleNames = rules.map(r => r.name || '未命名规则');
+      // 导出文件名：requestly规则_{时间戳}
+      const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+      const fileName = `requestly规则_${ts}.json`;
       history.unshift({
         id: Date.now(),
         time: new Date().toLocaleString('zh-CN'),
+        fileName: fileName,
+        ruleNames: ruleNames,
         rules: rules
       });
       // 最多保留 MAX_HISTORY 条
@@ -1032,18 +1043,28 @@
       if (history.length === 0) {
         list.innerHTML = '<p style="text-align:center;color:var(--text-light);padding:20px;">暂无历史记录</p>';
       } else {
-        list.innerHTML = history.map(h => `
+        list.innerHTML = history.map(h => {
+          // 优先使用 ruleNames 字段，兼容旧版本
+          const names = h.ruleNames || h.rules.map(r => r.name || '未命名规则');
+          const namesDisplay = names.join('、');
+          // 优先使用 fileName 字段，兼容旧版本
+          const fileName = h.fileName || `requestly规则_${h.id}.json`;
+          return `
           <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
             <div>
-              <div style="font-weight:500;">${h.time}</div>
-              <div style="font-size:12px;color:var(--text-light);margin-top:2px;">${h.rules.length} 条规则</div>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <span style="font-weight:500;font-size:15px;">${fileName}</span>
+                <span style="font-size:13px;color:var(--text-light);">${h.time}</span>
+              </div>
+              <div style="font-size:12px;color:var(--text-light);margin-top:4px;">${names.length} 条规则: ${namesDisplay}</div>
             </div>
             <div style="display:flex;gap:8px;">
               <button class="btn btn-primary btn-sm" onclick="restoreHistory(${h.id})">恢复</button>
               <button class="btn btn-secondary btn-sm" onclick="downloadHistory(${h.id})">下载</button>
             </div>
           </div>
-        `).join('');
+        `;
+        }).join('');
       }
 
       document.getElementById('historyModal').style.display = 'flex';
