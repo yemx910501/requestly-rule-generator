@@ -480,6 +480,7 @@
     let currentRuleIndex = -1; // 当前选中的规则索引
     let matchUrl = 'https://tecr.hometax.go.kr/wqAction.do'; // 默认 URL 匹配条件
     let currentMatchUrl = ''; // 当前规则的 URL 匹配条件
+    let ruleCache = {}; // 缓存每个规则的编辑状态 { index: { responseGroups, ruleDesc } }
 
     // ==================== Toast 提示 ====================
     function showToast(message, type = 'success') {
@@ -523,6 +524,14 @@
       index = parseInt(index);
       if (isNaN(index) || index < 0 || index >= allRules.length) return;
 
+      // 保存当前规则的编辑状态到缓存
+      if (currentRuleIndex >= 0) {
+        ruleCache[currentRuleIndex] = {
+          responseGroups: JSON.parse(JSON.stringify(responseGroups)),
+          ruleDesc: document.getElementById('ruleDesc').value
+        };
+      }
+
       // 更新 Tab 激活状态
       const tabs = document.querySelectorAll('.tab-item');
       tabs.forEach((tab, i) => {
@@ -532,18 +541,21 @@
       currentRuleIndex = index;
       const rule = allRules[index];
 
-      // 设置基本信息
-      document.getElementById('ruleDesc').value = rule.description || '';
-
-      // 获取 URL 匹配条件
-      currentMatchUrl = rule.pairs?.[0]?.source?.value || matchUrl;
-
-      // 解析 JavaScript 代码
-      const javascript = rule.pairs?.[0]?.response?.value;
-      if (javascript) {
-        parseJavaScriptToGroups(javascript);
+      // 尝试从缓存恢复
+      if (ruleCache[index]) {
+        responseGroups = JSON.parse(JSON.stringify(ruleCache[index].responseGroups));
+        document.getElementById('ruleDesc').value = ruleCache[index].ruleDesc || '';
       } else {
-        responseGroups = [];
+        // 首次加载，从原始数据解析
+        document.getElementById('ruleDesc').value = rule.description || '';
+        currentMatchUrl = rule.pairs?.[0]?.source?.value || matchUrl;
+
+        const javascript = rule.pairs?.[0]?.response?.value;
+        if (javascript) {
+          parseJavaScriptToGroups(javascript);
+        } else {
+          responseGroups = [];
+        }
       }
 
       renderResponseGroups();
@@ -569,7 +581,7 @@
             <div>
               <h4>${group.name}</h4>
               <div style="display: flex; gap: 8px; margin-top: 4px;">
-                <span class="badge">${group.actionId}</span>
+                ${group.actionId ? `<span class="badge">${group.actionId}</span>` : ''}
                 ${group.dataPath ? `<span class="badge green">${group.dataPath}</span>` : ''}
                 <span class="badge">${group.fields.length} 个字段</span>
               </div>
@@ -611,6 +623,9 @@
 
     // ==================== 生成 JavaScript 代码 ====================
     function generateJavaScript() {
+      // 判断是否为简单规则（无 actionId）
+      const isSimpleRule = responseGroups.length === 1 && !responseGroups[0].actionId;
+
       let code = `function modifyResponse(args) {\n`;
       code += `  const {\n`;
       code += `    method,\n`;
@@ -623,87 +638,87 @@
       code += `  } = args;\n`;
       code += `  // Change response below depending upon request attributes received in args\n`;
       code += `  var res = JSON.parse(response);\n`;
-      code += `  const uri = new URL(url);\n`;
-      code += `  const actionId = uri.searchParams.get("actionId");\n\n`;
 
-      responseGroups.forEach((group, index) => {
-        code += `  if (actionId == "${group.actionId}") {\n`;
-        code += `    // === ${group.name} ===\n`;
+      if (isSimpleRule) {
+        // 简单规则：直接输出条件判断和赋值
+        const group = responseGroups[0];
+        // 从原始规则中获取条件表达式
+        const rule = allRules[currentRuleIndex];
+        const originalCode = rule.pairs?.[0]?.response?.value || '';
+        const condMatch = originalCode.match(/if\s*\((.+?)\)\s*\{/);
+        const condition = condMatch ? condMatch[1] : 'true';
 
-        // 按 dataPath 分组字段
-        const fieldsByPath = {};
+        code += `  if (${condition}) {\n`;
+
         group.fields.forEach(field => {
-          const path = field.dataPath || ''; // 空字符串表示直接操作 res
-          if (!fieldsByPath[path]) {
-            fieldsByPath[path] = [];
+          if (field.comment) code += `    // ${field.comment}\n`;
+          const valueStr = field.type === 'number' ? field.value : `"${field.value}"`;
+          if (field.dataPath) {
+            code += `    res.${field.dataPath}.${field.name} = ${valueStr};\n`;
+          } else {
+            code += `    res.${field.name} = ${valueStr};\n`;
           }
-          fieldsByPath[path].push(field);
         });
 
-        // 为每个 dataPath 生成对应的代码块
-        Object.entries(fieldsByPath).forEach(([dataPath, fields]) => {
-          let target;
-          let varDecl = '';
-          let varName = '';
+        code += `  }\n`;
+      } else {
+        // actionId 多分支规则
+        code += `  const uri = new URL(url);\n`;
+        code += `  const actionId = uri.searchParams.get("actionId");\n\n`;
 
-          if (dataPath) {
-            // 检查是否已包含数组索引（如 bmanBscInfrInqrDVOList[0]）
-            if (dataPath.includes('[')) {
-              // 已有索引，直接使用
-              target = `res.${dataPath}`;
-            } else if (dataPath.includes('List') || dataPath.includes('list') || dataPath.endsWith('s')) {
-              // 数组路径（名称含 List/list 或复数形式），使用可选链 + 默认对象模式
-              varName = dataPath.replace(/List$/, '') || dataPath.substring(0, 20);
-              varDecl = `    const ${varName} = res.${dataPath}?.[0] ?? {};\n`;
-              target = varName;
-            } else {
-              // 普通对象路径，直接使用
-              target = `res.${dataPath}`;
-            }
-          } else {
-            // 根对象
-            target = 'res';
-          }
+        responseGroups.forEach((group, index) => {
+          code += `  if (actionId == "${group.actionId}") {\n`;
+          code += `    // === ${group.name} ===\n`;
 
-          // 输出变量声明（如果需要）
-          if (varDecl) {
-            code += varDecl;
-            code += `\n`;
-          }
-
-          fields.forEach(field => {
-            if (field.comment) {
-              code += `    // ${field.comment}\n`;
-            }
-
-            const valueStr = field.type === 'number' ? field.value : `"${field.value}"`;
-            code += `    ${target}.${field.name} = ${valueStr};\n`;
+          const fieldsByPath = {};
+          group.fields.forEach(field => {
+            const path = field.dataPath || '';
+            if (!fieldsByPath[path]) fieldsByPath[path] = [];
+            fieldsByPath[path].push(field);
           });
 
-          // 如果使用了局部变量，需要将结果重新赋值回 res
-          if (varDecl && dataPath) {
-            code += `\n    res.${dataPath} = [${varName}];\n`;
+          Object.entries(fieldsByPath).forEach(([dataPath, fields]) => {
+            let target, varDecl = '', varName = '';
+
+            if (dataPath) {
+              if (dataPath.includes('[')) {
+                target = `res.${dataPath}`;
+              } else if (dataPath.includes('List') || dataPath.includes('list') || dataPath.endsWith('s')) {
+                varName = dataPath.replace(/List$/, '') || dataPath.substring(0, 20);
+                varDecl = `    const ${varName} = res.${dataPath}?.[0] ?? {};\n`;
+                target = varName;
+              } else {
+                target = `res.${dataPath}`;
+              }
+            } else {
+              target = 'res';
+            }
+
+            if (varDecl) { code += varDecl; code += `\n`; }
+
+            fields.forEach(field => {
+              if (field.comment) code += `    // ${field.comment}\n`;
+              const valueStr = field.type === 'number' ? field.value : `"${field.value}"`;
+              code += `    ${target}.${field.name} = ${valueStr};\n`;
+            });
+
+            if (varDecl && dataPath) {
+              code += `\n    res.${dataPath} = [${varName}];\n`;
+            }
+
+            if (Object.keys(fieldsByPath).length > 1) code += `\n`;
+          });
+
+          if (group.actionId === 'ATECRCBA001R02') {
+            code += `    res.pageInfoVO.totalCount = 1;\n`;
+            code += `    res.totalCount = 1;\n`;
           }
 
-          // 在多个 dataPath 之间添加空行分隔
-          if (Object.keys(fieldsByPath).length > 1) {
-            code += `\n`;
-          }
+          code += `  }`;
+          if (index < responseGroups.length - 1) code += ` else`;
+          code += `\n\n`;
         });
-
-        // 为 ATECRCBA001R02 分支追加固定字段
-        if (group.actionId === 'ATECRCBA001R02') {
-          code += `    res.pageInfoVO.totalCount = 1;\n`;
-          code += `    res.totalCount = 1;\n`;
-        }
-
-        code += `  }`;
-        if (index < responseGroups.length - 1) {
-          code += ` else`;
-        }
-
-        code += `\n\n`;
-      });
+      }
 
       code += `  return JSON.stringify(res);\n`;
       code += `}`;
@@ -869,270 +884,206 @@
       responseGroups = [];
 
       console.log('========== 开始解析 JavaScript 代码 ==========');
-      console.log('代码总长度:', code.length);
 
-      // 找到所有 if/else if 行的位置
-      const ifPositions = [];
+      // 判断规则类型：是否有 actionId 分支
+      const hasActionId = /actionId\s*==\s*"/.test(code);
+
+      if (hasActionId) {
+        parseActionIdRule(code);
+      } else {
+        parseSimpleRule(code);
+      }
+
+      console.log(`\n========== 解析完成，共 ${responseGroups.length} 个规则组 ==========`);
+    }
+
+    // ==================== 解析 actionId 多分支规则 ====================
+    function parseActionIdRule(code) {
       const lines = code.split('\n');
-      
+      const ifPositions = [];
+
       for (let i = 0; i < lines.length; i++) {
         const trimmed = lines[i].trim();
         const match = trimmed.match(/(?:else\s+)?if\s*\(\s*actionId\s*==\s*"([^"]+)"\s*\)/);
         if (match) {
           ifPositions.push({ lineIndex: i, actionId: match[1] });
-          console.log(`找到 if 分支: ${match[1]} (行 ${i}): "${trimmed.substring(0, 60)}..."`);
         }
       }
 
-      if (ifPositions.length === 0) {
-        console.warn('未找到任何 actionId 分支');
-        return;
-      }
+      if (ifPositions.length === 0) return;
 
-      console.log(`\n共找到 ${ifPositions.length} 个分支，开始逐个解析...`);
-
-      // 为每个分支提取内容
       ifPositions.forEach((pos, idx) => {
         const nextIdx = idx + 1 < ifPositions.length ? ifPositions[idx + 1].lineIndex : lines.length;
         const blockLines = lines.slice(pos.lineIndex + 1, nextIdx);
 
-        const group = {
-          name: '',
-          actionId: pos.actionId,
-          dataPath: '',
-          fields: []
-        };
-
-        console.log(`\n--- 解析分支 ${pos.actionId} (${blockLines.length} 行) ---`);
-        blockLines.forEach((l, i) => console.log(`  原始[${i}]: "${l.trim()}"`));
+        const group = { name: '', actionId: pos.actionId, dataPath: '', fields: [] };
 
         // 查找组名注释
         for (const line of blockLines) {
           const nameMatch = line.match(/\/\/\s*===\s*(.+?)\s*===/);
-          if (nameMatch) {
-            group.name = nameMatch[1].trim();
-            console.log(`  找到组名: "${group.name}"`);
-            break;
-          }
+          if (nameMatch) { group.name = nameMatch[1].trim(); break; }
         }
-        if (!group.name) {
-          group.name = `规则 ${pos.actionId}`;
-        }
+        if (!group.name) group.name = `规则 ${pos.actionId}`;
 
-        // 合并连续行，只处理多行赋值（上一行以 = 结尾且无分号）
-        // 注意：注释行不合并，保持独立
+        // 合并连续行
         const mergedLines = [];
         for (let k = 0; k < blockLines.length; k++) {
           const line = blockLines[k].trim();
           const prevLine = mergedLines.length > 0 ? mergedLines[mergedLines.length - 1] : '';
-          // 只有上一行以 = 结尾且不是注释行才合并（避免 === 结尾的注释被错误合并）
           if (line && !prevLine.startsWith('//') && prevLine.endsWith('=') && !prevLine.endsWith(';')) {
             mergedLines[mergedLines.length - 1] += ' ' + line;
           } else {
             mergedLines.push(line);
           }
         }
-        console.log(`  合并后 ${mergedLines.length} 行`);
-        mergedLines.forEach((l, i) => console.log(`    [${i}]: "${l}"`));
 
-        // 跟踪局部变量映射: variableName -> dataPath（不含 res. 前缀）
+        // 扫描变量声明
         const varMap = {};
-        // 记录第一个变量声明的 dataPath，用于对象字面量字段继承
         let firstVarDeclDataPath = '';
-
-        // 先扫描 const/let 变量声明，提取 res.xxx[0] 路径
-        for (let k = 0; k < mergedLines.length; k++) {
-          const line = mergedLines[k];
-          // 匹配: const xxx = res.xxxList?.[0] 或 const xxx = res.xxxList[0]
+        for (const line of mergedLines) {
           const varDeclMatch = line.match(/const\s+(\w+)\s*=\s*res\.([\w]+)(?:\??\[\d+\])?/);
           if (varDeclMatch) {
             varMap[varDeclMatch[1]] = varDeclMatch[2];
-            // 记录第一个变量声明的 dataPath（用于对象字面量字段继承）
-            if (!firstVarDeclDataPath) {
-              firstVarDeclDataPath = varDeclMatch[2];
-            }
-            console.log(`  发现变量映射: ${varDeclMatch[1]} -> ${varDeclMatch[2]}`);
+            if (!firstVarDeclDataPath) firstVarDeclDataPath = varDeclMatch[2];
           }
         }
+        if (firstVarDeclDataPath) group.dataPath = firstVarDeclDataPath;
 
-        // 如果有变量声明，将 group.dataPath 设置为第一个变量的路径
-        if (firstVarDeclDataPath && !group.dataPath) {
-          group.dataPath = firstVarDeclDataPath;
-          console.log(`  设置 group.dataPath 为: "${firstVarDeclDataPath}"`);
-        }
-
-        // 解析字段赋值
-        let fieldCount = 0;
-        // 记录已处理过的行索引（避免重复处理）
+        // 解析字段
         const processedLines = new Set();
+        let fieldCount = 0;
 
         for (let k = 0; k < mergedLines.length; k++) {
           if (processedLines.has(k)) continue;
-
           const line = mergedLines[k];
 
-          // 先尝试匹配独立的赋值语句（如 res.pageInfoVO.totalCount = 1;）
-          // 格式 A: res.xxx.field = value; 或 res.field = value;
+          // 独立赋值: res.xxx.field = value;
           const standaloneMatch = line.match(/res\.([\w]+(?:\[\d+\])?(?:\.[\w]+(?:\[\d+\])?)*)\s*=\s*(.+?);/);
           if (standaloneMatch && !line.startsWith('//')) {
             const fullPath = standaloneMatch[1];
-            let valueStr = standaloneMatch[2].trim();
-            if (valueStr.endsWith(',')) {
-              valueStr = valueStr.slice(0, -1);
-            }
+            let valueStr = standaloneMatch[2].trim().replace(/,$/, '');
             const isNumber = !valueStr.startsWith('"') && !valueStr.startsWith("'");
-            if (!isNumber) {
-              valueStr = valueStr.replace(/^["']|["']$/g, '');
-            }
+            if (!isNumber) valueStr = valueStr.replace(/^["']|["']$/g, '');
 
             const lastDotIndex = fullPath.lastIndexOf('.');
-            let fieldName, dataPath;
-            if (lastDotIndex !== -1) {
-              fieldName = fullPath.substring(lastDotIndex + 1);
-              dataPath = fullPath.substring(0, lastDotIndex);
-            } else {
-              fieldName = fullPath;
-              dataPath = '';
-            }
+            const fieldName = lastDotIndex !== -1 ? fullPath.substring(lastDotIndex + 1) : fullPath;
+            const dataPath = lastDotIndex !== -1 ? fullPath.substring(0, lastDotIndex) : '';
 
-            // 跳过 pageInfoVO.totalCount 和 totalCount（导出时硬编码追加）
-            if (fieldName === 'totalCount') {
-              console.log(`    [行${k}] 跳过 totalCount 字段（导出时追加）`);
-              processedLines.add(k);
-              continue;
-            }
-
-            // 跳过将列表重新赋值回变量的行（如 res.cshTrsBrkdInqrDVOList = [cshTrsBrkdInqrDVO];）
-            if (Object.values(varMap).includes(fullPath)) {
-              console.log(`    [行${k}] 跳过列表回赋值: "${fullPath}"`);
-              processedLines.add(k);
-              continue;
-            }
+            if (fieldName === 'totalCount') { processedLines.add(k); continue; }
+            if (Object.values(varMap).includes(fullPath)) { processedLines.add(k); continue; }
 
             fieldCount++;
-            console.log(`    字段 ${fieldCount}: [无注释] -> ${fullPath} = ${valueStr} (dataPath: ${dataPath})`);
-            group.fields.push({
-              comment: '',
-              name: fieldName,
-              value: valueStr,
-              type: isNumber ? 'number' : 'string',
-              dataPath: dataPath
-            });
+            group.fields.push({ comment: '', name: fieldName, value: valueStr, type: isNumber ? 'number' : 'string', dataPath });
             processedLines.add(k);
             continue;
           }
 
-          // 如果不是独立赋值，尝试匹配注释行
+          // 注释 + 赋值
           const fieldMatch = line.match(/\/\/\s*(.+?)$/);
-          if (fieldMatch) {
+          if (fieldMatch && !line.match(/\/\/\s*===\s*.+?\s*===/)) {
             const comment = fieldMatch[1].trim();
+            let searchK = k + 1;
+            while (searchK < mergedLines.length && !mergedLines[searchK].trim()) searchK++;
+            if (searchK >= mergedLines.length) continue;
 
-            // 跳过组名注释（如 // === 商户信息 ===）
-            if (line.match(/\/\/\s*===\s*.+?\s*===/)) {
-              console.log(`    [行${k}] 跳过组名注释: "${line}"`);
-              continue;
+            const assignLine = mergedLines[searchK];
+            let assignMatch = assignLine.match(/res\.([\w]+(?:\[\d+\])?(?:\.[\w]+(?:\[\d+\])?)*)\s*=\s*(.+?);/);
+
+            if (!assignMatch) {
+              const localVarMatch = assignLine.match(/(\w+)\.(\w+)\s*=\s*(.+?);/);
+              if (localVarMatch && varMap[localVarMatch[1]]) {
+                assignMatch = [null, varMap[localVarMatch[1]] + '.' + localVarMatch[2], localVarMatch[3]];
+              }
             }
 
-            console.log(`    [行${k}] 注释: "${comment}", 下一行: "${mergedLines[k+1] || '无'}"`);
+            let isInheritDataPath = false;
+            if (!assignMatch) {
+              const literalMatch = assignLine.match(/([\w]+)\s*:\s*(.+?),?$/);
+              if (literalMatch) { assignMatch = literalMatch; isInheritDataPath = true; }
+            }
 
-            if (k + 1 < mergedLines.length) {
-              const assignLine = mergedLines[k + 1];
+            if (assignMatch) {
+              const fullPath = assignMatch[1];
+              let valueStr = assignMatch[2].trim().replace(/,$/, '');
+              const isNumber = !valueStr.startsWith('"') && !valueStr.startsWith("'");
+              if (!isNumber) valueStr = valueStr.replace(/^["']|["']$/g, '');
 
-              // 跳过空行，找到下一个非空行
-              let searchK = k + 1;
-              let targetAssignLine = '';
-              while (searchK < mergedLines.length) {
-                targetAssignLine = mergedLines[searchK].trim();
-                if (targetAssignLine) break;
-                searchK++;
-              }
-
-              console.log(`    [行${k}] 搜索赋值行: "${targetAssignLine}"`);
-
-              // 格式 1: res.xxx.field = value (支持任意深度路径和数组索引)
-              let assignMatch = targetAssignLine.match(/res\.([\w]+(?:\[\d+\])?(?:\.[\w]+(?:\[\d+\])?)*)\s*=\s*(.+?);/);
-              
-              console.log(`    [行${k}] 格式1匹配结果: ${assignMatch ? '是' : '否'}`);
-
-              // 格式 2: 局部变量.field = value (如 cshTrsBrkdInqrDVO.trsDtTime)
-              if (!assignMatch) {
-                const localVarMatch = targetAssignLine.match(/(\w+)\.(\w+)\s*=\s*(.+?);/);
-                console.log(`    [行${k}] 格式2匹配结果: ${localVarMatch ? '是' : '否'}`);
-                if (localVarMatch && varMap[localVarMatch[1]]) {
-                  assignMatch = [null, varMap[localVarMatch[1]] + '.' + localVarMatch[2], localVarMatch[3]];
-                }
-              }
-              
-              // 格式 3: 对象字面量属性 (fieldName: value,) - 这些字段应继承当前组的 dataPath
-              let isInheritDataPath = false;
-              if (!assignMatch) {
-                const literalMatch = targetAssignLine.match(/([\w]+)\s*:\s*(.+?),?$/);
-                console.log(`    [行${k}] 格式3匹配结果: ${literalMatch ? '是' : '否'}, 匹配内容: ${literalMatch ? literalMatch[0] : '无'}`);
-                if (literalMatch) {
-                  assignMatch = literalMatch;
-                  isInheritDataPath = true; // 标记为需要继承 dataPath
-                  console.log(`    [行${k}] 检测到对象字面量格式: "${targetAssignLine}"`);
-                }
-              }
-
-              if (assignMatch) {
-                const fullPath = assignMatch[1];
-                let valueStr = assignMatch[2].trim();
-
-                if (valueStr.endsWith(',')) {
-                  valueStr = valueStr.slice(0, -1);
-                }
-
-                const isNumber = !valueStr.startsWith('"') && !valueStr.startsWith("'");
-                if (!isNumber) {
-                  valueStr = valueStr.replace(/^["']|["']$/g, '');
-                }
-
-                const lastDotIndex = fullPath.lastIndexOf('.');
-                let fieldName, dataPath;
-                if (lastDotIndex !== -1) {
-                  fieldName = fullPath.substring(lastDotIndex + 1);
-                  dataPath = fullPath.substring(0, lastDotIndex);
-                } else {
-                  fieldName = fullPath;
-                  // 如果是对象字面量格式（格式3），继承当前组的 dataPath
-                  if (isInheritDataPath && group.dataPath) {
-                    dataPath = group.dataPath;
-                    console.log(`    [行${k}] 对象字面量继承 dataPath: "${dataPath}"`);
-                  } else {
-                    dataPath = '';
-                    console.log(`    [行${k}] 对象字面量无法继承 dataPath，group.dataPath = "${group.dataPath}"`);
-                  }
-                }
-
-                fieldCount++;
-                console.log(`    字段 ${fieldCount}: ${comment} -> ${fullPath} = ${valueStr} (dataPath: ${dataPath})`);
-                group.fields.push({
-                  comment,
-                  name: fieldName,
-                  value: valueStr,
-                  type: isNumber ? 'number' : 'string',
-                  dataPath: dataPath
-                });
-
-                // 标记赋值行已处理
-                processedLines.add(searchK);
-
-                if (!group.dataPath && dataPath) {
-                  group.dataPath = dataPath;
-                }
+              const lastDotIndex = fullPath.lastIndexOf('.');
+              let fieldName, dataPath;
+              if (lastDotIndex !== -1) {
+                fieldName = fullPath.substring(lastDotIndex + 1);
+                dataPath = fullPath.substring(0, lastDotIndex);
               } else {
-                console.log(`  注释 "${comment}" 后未找到匹配赋值: "${mergedLines[k+1]?.substring(0, 50)}"`);
+                fieldName = fullPath;
+                dataPath = isInheritDataPath && group.dataPath ? group.dataPath : '';
               }
+
+              fieldCount++;
+              group.fields.push({ comment, name: fieldName, value: valueStr, type: isNumber ? 'number' : 'string', dataPath });
+              processedLines.add(searchK);
+              if (!group.dataPath && dataPath) group.dataPath = dataPath;
             }
           }
         }
 
-        console.log(`  分支 ${pos.actionId} 解析完成: ${fieldCount} 个字段`);
         responseGroups.push(group);
       });
+    }
 
-      console.log(`\n========== 解析完成，共 ${responseGroups.length} 个规则组 ==========`);
+    // ==================== 解析简单规则（无条件分支，如用户信息） ====================
+    function parseSimpleRule(code) {
+      const lines = code.split('\n');
+
+      const group = {
+        name: '字段修改',
+        actionId: '',
+        dataPath: '',
+        fields: []
+      };
+
+      // 查找条件注释作为组名
+      for (const line of lines) {
+        const condMatch = line.match(/if\s*\((.+?)\)\s*\{/);
+        if (condMatch) {
+          group.name = `条件: ${condMatch[1].trim()}`;
+          break;
+        }
+      }
+
+      // 解析所有 res.xxx.yyy = value 赋值
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('//')) continue;
+
+        const assignMatch = line.match(/res\.([\w]+(?:\.[\w]+)*)\s*=\s*(.+?);/);
+        if (!assignMatch) continue;
+
+        const fullPath = assignMatch[1];
+        let valueStr = assignMatch[2].trim().replace(/,$/, '');
+        const isNumber = !valueStr.startsWith('"') && !valueStr.startsWith("'");
+        if (!isNumber) valueStr = valueStr.replace(/^["']|["']$/g, '');
+
+        const lastDotIndex = fullPath.lastIndexOf('.');
+        const fieldName = lastDotIndex !== -1 ? fullPath.substring(lastDotIndex + 1) : fullPath;
+        const dataPath = lastDotIndex !== -1 ? fullPath.substring(0, lastDotIndex) : '';
+
+        // 查找前面的注释作为字段说明
+        let comment = '';
+        for (let j = i - 1; j >= 0; j--) {
+          const prevLine = lines[j].trim();
+          if (prevLine.startsWith('//') && !prevLine.includes('===') && !prevLine.includes('console.log')) {
+            comment = prevLine.replace(/^\/\/\s*/, '');
+          }
+          break;
+        }
+
+        group.fields.push({ comment, name: fieldName, value: valueStr, type: isNumber ? 'number' : 'string', dataPath });
+        if (!group.dataPath && dataPath) group.dataPath = dataPath;
+      }
+
+      if (group.fields.length > 0) {
+        responseGroups.push(group);
+      }
     }
 
     // ==================== 更新导出按钮状态 ====================

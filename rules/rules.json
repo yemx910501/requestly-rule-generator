@@ -9,7 +9,7 @@
     "isSample": false,
     "lastModifiedBy": "browserstack-10930584",
     "modificationDate": 1777601342361,
-    "name": "用户信息",
+    "name": "商户信息",
     "objectType": "rule",
     "pairs": [
       {
@@ -18,7 +18,7 @@
           "resourceType": "restApi",
           "statusCode": "",
           "type": "code",
-          "value": "function modifyResponse(args) {\n  const {\n    method,\n    url,\n    response,\n    responseType,\n    requestHeaders,\n    requestData,\n    responseJSON,\n  } = args;\n  // Change response below depending upon request attributes received in args\n  // console.log(\"hook\", url, response, JSON.parse(response));\n  var res = JSON.parse(response);\n  //res.cshTrsBrkdInqrDVOList[0].splCft = 10000;\n  if (res.resultMsg && res.resultMsg.sessionMap) {\n    res.resultMsg.sessionMap.userNm = \"다오방 유한회사\";\n    res.resultMsg.sessionMap.txprDscmNo = \"1218644444\";\n  }\n  return JSON.stringify(res);\n}\n"
+          "value": "function modifyResponse(args) {\n  const {\n    method,\n    url,\n    response,\n    responseType,\n    requestHeaders,\n    requestData,\n    responseJSON,\n  } = args;\n  // Change response below depending upon request attributes received in args\n  // console.log(\"hook\", url, response, JSON.parse(response));\n  var res = JSON.parse(response);\n  //res.cshTrsBrkdInqrDVOList[0].splCft = 10000;\n  if (res.resultMsg && res.resultMsg.sessionMap) {\n    // 商号\n    res.resultMsg.sessionMap.userNm = \"다오방 유한회사\";\n    // 商业登记号码\n    res.resultMsg.sessionMap.txprDscmNo = \"1218644444\";\n  }\n  return JSON.stringify(res);\n}\n"
         },
         "source": {
           "key": "Url",
