@@ -761,19 +761,61 @@
     }
 
     // ==================== 导出规则 ====================
-    function generateRuleJSON() {
-      if (currentRuleIndex < 0 || responseGroups.length === 0) {
-        return null;
+    function generateRuleJSONForIndex(index) {
+      const rule = allRules[index];
+
+      // 优先使用缓存中的编辑数据，否则使用当前数据
+      let groups, desc;
+      if (ruleCache[index]) {
+        groups = ruleCache[index].responseGroups;
+        desc = ruleCache[index].ruleDesc || '';
+      } else if (index === currentRuleIndex) {
+        groups = responseGroups;
+        desc = document.getElementById('ruleDesc').value;
+      } else {
+        // 未访问过的规则，从原始数据解析
+        const javascript = rule.pairs?.[0]?.response?.value;
+        if (!javascript) return null;
+        const tempGroups = [];
+        const hasActionId = /actionId\s*==\s*"/.test(javascript);
+        // 临时解析
+        const origGroups = responseGroups;
+        const origIndex = currentRuleIndex;
+        currentRuleIndex = index;
+        if (hasActionId) {
+          parseActionIdRule(javascript);
+        } else {
+          parseSimpleRule(javascript);
+        }
+        tempGroups.push(...responseGroups);
+        responseGroups = origGroups;
+        currentRuleIndex = origIndex;
+        groups = tempGroups;
+        desc = rule.description || '';
       }
 
-      const rule = allRules[currentRuleIndex];
+      if (!groups || groups.length === 0) return null;
+
+      // 临时设置 responseGroups 和 currentRuleIndex 来生成代码
+      const origGroups = responseGroups;
+      const origIndex = currentRuleIndex;
+      const origMatchUrl = currentMatchUrl;
+      responseGroups = groups;
+      currentRuleIndex = index;
+      currentMatchUrl = rule.pairs?.[0]?.source?.value || matchUrl;
+
       const javascript = generateJavaScript();
 
-      return [{
+      // 恢复
+      responseGroups = origGroups;
+      currentRuleIndex = origIndex;
+      currentMatchUrl = origMatchUrl;
+
+      return {
         "createdBy": rule.createdBy || "browserstack-10930584",
         "creationDate": rule.creationDate || Date.now(),
         "currentOwner": rule.currentOwner || "browserstack-10930584",
-        "description": document.getElementById('ruleDesc').value.trim(),
+        "description": desc,
         "groupId": rule.groupId || "",
         "id": rule.id || `Response_${Math.random().toString(36).substr(2, 5)}`,
         "isSample": false,
@@ -798,38 +840,37 @@
         "ruleType": "Response",
         "schemaVersion": "3.0.0",
         "status": "Active"
-      }];
+      };
     }
 
     function exportRules() {
-      if (currentRuleIndex < 0) {
-        showToast('请先选择规则', 'error');
+      if (allRules.length === 0) {
+        showToast('没有可导出的规则', 'error');
         return;
       }
 
-      if (responseGroups.length === 0) {
-        showToast('当前规则无可编辑内容', 'error');
-        return;
+      const rules = [];
+      for (let i = 0; i < allRules.length; i++) {
+        const ruleJSON = generateRuleJSONForIndex(i);
+        if (ruleJSON) rules.push(ruleJSON);
       }
 
-      const rules = generateRuleJSON();
-      if (!rules) {
+      if (rules.length === 0) {
         showToast('生成规则失败', 'error');
         return;
       }
 
-      const rule = allRules[currentRuleIndex];
       const blob = new Blob([JSON.stringify(rules, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${rule.name || 'rule'}.json`;
+      a.download = 'rules.json';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      showToast('规则导出成功');
+      showToast('导出成功');
     }
 
     // ==================== 导入规则 ====================
