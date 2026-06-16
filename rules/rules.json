@@ -9,7 +9,7 @@
     "isSample": false,
     "lastModifiedBy": "browserstack-10930584",
     "modificationDate": 1777601342361,
-    "name": "用户1_用户信息",
+    "name": "用户信息",
     "objectType": "rule",
     "pairs": [
       {
@@ -41,7 +41,7 @@
     "isSample": false,
     "lastModifiedBy": "browserstack-10930584",
     "modificationDate": 1779625299278,
-    "name": "用户1_查询现金收据购买历史记录",
+    "name": "现金收据购买历史记录",
     "objectType": "rule",
     "pairs": [
       {
