@@ -1093,6 +1093,34 @@
       ruleCache = {};
       currentRuleIndex = -1;
 
+      // 预解析所有规则的响应组数据到缓存中
+      for (let i = 0; i < allRules.length; i++) {
+        const rule = allRules[i];
+        const javascript = rule.pairs?.[0]?.response?.value;
+        if (!javascript) continue;
+
+        // 临时保存当前状态
+        const origGroups = responseGroups;
+        const origIndex = currentRuleIndex;
+        const origMatchUrl = currentMatchUrl;
+
+        // 临时设置上下文以解析该规则
+        currentRuleIndex = i;
+        currentMatchUrl = rule.pairs?.[0]?.source?.value || matchUrl;
+        parseJavaScriptToGroups(javascript);
+
+        // 将解析结果存入缓存
+        ruleCache[i] = {
+          responseGroups: JSON.parse(JSON.stringify(responseGroups)),
+          ruleName: rule.name || '未命名规则'
+        };
+
+        // 恢复临时状态
+        responseGroups = origGroups;
+        currentRuleIndex = origIndex;
+        currentMatchUrl = origMatchUrl;
+      }
+
       // 重新渲染 Tab 和内容
       renderTabs();
       if (allRules.length > 0) {
